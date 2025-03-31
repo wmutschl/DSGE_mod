@@ -120,10 +120,14 @@ EPSILON*x1 = (EPSILON-1)*x2;
 x1 = mc*y/c + THETA*bet*pie(+1)^EPSILON*x1(+1);
 [name='(A.7): optimal price setting auxiliary recursion 2']
 x2/pie_star = y/c + THETA*bet*pie(+1)^(EPSILON-1)*x2(+1)/pie_star(+1);
+
 [name='(A.8): monetary policy rule',relax='zlb']
 r = steady_state(r)*(pie/PI)^PHI_PI*(y/steady_state(y))^PHI_Y;
+
 [name='(A.8): monetary policy rule',bind='zlb']
 r = ZLB;
+
+
 [name='(A.10): government spending']
 g = G_Y*y;
 [name='(A.11): law of motion for optimal reset price']
@@ -177,7 +181,7 @@ end;
 @#define SHOCKSIZE = 5*0.005
 
 % replicate left column of Fig. 5 (increase in discount factor)
-shocks(surprise,overwrite);
+shocks(surprise);
 var epsi; periods 6; values @{SHOCKSIZE};
 end;
 

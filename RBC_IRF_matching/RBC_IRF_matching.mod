@@ -3,12 +3,15 @@
  *  government spending shock is estimated via impulse response function (IRF) matching. 
  *
  * Notes:
- *  - The empirical IRFs are estimated using the Blanchard/Perotti (2002) approach. Of course the RBC
- *      model is not capable of generating the consumption increase after a government spending shock. For that
- *      reason, this mod-file only targets the IRFs for G and Y.
- *  - The weighting matrix uses a diagonal matrix with the inverse of the pointwise IRF variances on the main 
- *      diagonal. The same approach has for example been used in Christiano/Eichenbaum/Evans (2005). To estimate 
- *      the variances, a simple residual bootstrap is performed
+ *  - The empirical IRFs were estimated using the Blanchard/Perotti (2002) approach.
+ *    They are given in the csv file rbc_irf_matching_data.csv, the first two columns contain
+ *    the empirical IRFs of G and Y, while the third and fourth column contain the corresponding
+ *    variances of the IRFs from a bootstrap approach.
+ *    Importantly: this mod file does not show how to get the empirical IRFs from a SVAR model,
+ *    but takes these as "data".
+ *  - Of course the RBC model is not capable of generating the consumption increase
+ *    after a government spending shock. For that reason, this mod-file only targets the IRFs for G and Y.
+ *  - The weighting matrix uses a diagonal matrix with the inverse of the pointwise IRF variances on the main diagonal.
  *  - The empirical IRFs and model IRFs use an impulse size of 1 percent. Thus, there is no uncertainty about the 
  *      initial impact. The IRF matching therefore only targets the G-response starting in the second period.
  *  - Note that for the current model, the number of IRFs exceeds the number of VAR parameters. Therefore,
@@ -18,36 +21,35 @@
  *      process instead of the coefficients. This allows for easily restricting the process to the stability region and 
  *      would allow specifying e.g. a beta prior for both roots as was done in Born/Peter/Pfeifer (2013), Fiscal news 
  *      and macroeconomic volatility, https://doi.org/10.1016/j.jedc.2013.06.011
- *  - The dataset was downloaded using the FRED plugin and can be easily updated with it.    
- *
- * This implementation was written by Johannes Pfeifer. In case you spot mistakes,
- * email me at jpfeifer@gmx.de
  *
  * Please note that the following copyright notice only applies to this Dynare 
  * implementation of the model.
  */
 
 /*
- * Copyright (C) 2016-17 Johannes Pfeifer
+ * Copyright (C) 2016-17 Johannes Pfeifer,
+ * Copyright (C) 2024 Dynare Team
  *
- * This is free software: you can redistribute it and/or modify
+ * This file is part of Dynare.
+ *
+ * Dynare is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * It is distributed in the hope that it will be useful,
+ * Dynare is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * For a copy of the GNU General Public License,
- * see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License
+ * along with Dynare.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 %----------------------------------------------------------------
 % define variables 
 %----------------------------------------------------------------
 @#define IRF_periods=80
-@#define CMAES=0
 
 var y           ${y}$ (long_name='output')
     c           ${c}$ (long_name='consumption')
@@ -64,52 +66,38 @@ var y           ${y}$ (long_name='output')
     log_l       ${\log(l)}$ (long_name='log labor')
     log_w       ${\log(w)}$ (long_name='log real wage')
     log_invest  ${\log(i)}$ (long_name='log investment')
-    ;
+;
 
 varexo eps_z ${\varepsilon_z}$ (long_name='TFP shock')
        eps_g ${\varepsilon_g}$ (long_name='government spending shock')
-    ;
+;
 
 %----------------------------------------------------------------
 % define parameters
 %----------------------------------------------------------------
 
 parameters 
-    beta    ${\beta}$   (long_name='discount factor')
-    psi     ${\psi}$    (long_name='labor disutility parameter')
-    sigma   ${\sigma}$  (long_name='risk aversion')
-    delta   ${\delta}$  (long_name='depreciation rate')
-    alpha   ${\alpha}$  (long_name='capital share')
-    rhoz    ${\rho_z}$  (long_name='persistence TFP shock')
-    root_g_1    ${\rho_g}$  (long_name='persistence G shock')
-    root_g_2    ${\rho_g}$  (long_name='persistence G shock')
-    gammax  ${\gamma_x}$ (long_name='composite growth rate')
-    gshare  ${\frac{G}{Y}}$ (long_name='government spending share')
-    n       ${n}$       (long_name='population growth')
-    x       ${x}$       (long_name='technology growth (per capita output growth)')
-    i_y     ${\frac{I}{Y}}$ (long_name='investment-output ratio')
-    k_y     ${\frac{K}{Y}}$ (long_name='capital-output ratio')
-    g_ss    ${\bar G}$ (long_name='government spending in steady state')
-    ;
+    beta     ${\beta}$       (long_name='discount factor')
+    psi      ${\psi}$        (long_name='labor disutility parameter')
+    sigma    ${\sigma}$      (long_name='risk aversion')
+    delta    ${\delta}$      (long_name='depreciation rate')
+    alpha    ${\alpha}$      (long_name='capital share')
+    rhoz     ${\rho_z}$      (long_name='persistence TFP shock')
+    root_g_1 ${\rho_g}$      (long_name='first root of AR(2) G process')
+    root_g_2 ${\rho_g}$      (long_name='second root of AR(2) G process')
+    gammax   ${\gamma_x}$    (long_name='composite growth rate')
+    gshare   ${\frac{G}{Y}}$ (long_name='government spending share')
+    n        ${n}$           (long_name='population growth')
+    x        ${x}$           (long_name='technology growth (per capita output growth)')
+    i_y      ${\frac{I}{Y}}$ (long_name='investment-output ratio')
+    k_y      ${\frac{K}{Y}}$ (long_name='capital-output ratio')
+    g_ss     ${\bar G}$      (long_name='government spending in steady state')
+    l_ss     ${\bar L}$      (long_name='labor in steady state')
+;
 
 %----------------------------------------------------------------
-% set parameter values 
+% model equations
 %----------------------------------------------------------------
-sigma=1;
-alpha= 0.33;
-i_y=0.25;
-k_y=10.4;
-x=0.0055;
-n=0.0027;
-rhoz=0.97;
-root_g_1=0.9602;
-root_g_2=0;
-gshare=0.2038;
-
-%----------------------------------------------------------------
-% enter model equations
-%----------------------------------------------------------------
-
 model;
 # rho_g_1= (root_g_1+root_g_2);
 # rho_g_2= - root_g_1*root_g_2;
@@ -151,20 +139,17 @@ end;
 %---------------------------------------------------------------
 
 steady_state_model;
-    //Do Calibration
-    //calibrate the model to steady state labor of 0.33,i.e. compute the corresponding steady state values
-    // and the labor disutility parameter by hand;
-    gammax=(1+n)*(1+x);
-    delta=i_y/k_y-x-n-n*x;
-    beta=(1+x)*(1+n)/(alpha/k_y+(1-delta));
-    l=0.33;
+    gammax = (1+n)*(1+x);
+    delta = i_y/k_y-x-n-n*x;
+    beta = (1+x)*(1+n)/(alpha/k_y+(1-delta));
+    l = l_ss;
     k = ((1/beta*(1+n)*(1+x)-(1-delta))/alpha)^(1/(alpha-1))*l; 
     invest = (x+n+delta+n*x)*k;
-    y=k^alpha*l^(1-alpha);
-    g=gshare*y;
-    g_ss=g;
+    y = k^alpha*l^(1-alpha);
+    g = gshare*y;
+    g_ss = g;
     c = (1-gshare)*k^(alpha)*l^(1-alpha)-invest;
-    psi=(1-alpha)*(k/l)^alpha*(1-l)/c^sigma;
+    psi = (1-alpha)*(k/l)^alpha*(1-l)/c^sigma;
     w = (1-alpha)*y/l;
     r = 4*alpha*y/k;
     log_y = log(y);
@@ -178,67 +163,102 @@ steady_state_model;
 end;
 
 %----------------------------------------------------------------
-%  set shock variances
-%---------------------------------------------------------------
+% calibration
+%----------------------------------------------------------------
+sigma    = 1;
+alpha    = 0.33;
+i_y      = 0.25;
+k_y      = 10.4;
+x        = 0.0055;
+n        = 0.0027;
+rhoz     = 0.97;
+root_g_1 = 0.9602;
+root_g_2 = 0;
+gshare   = 0.2038;
+l_ss     = 1/3;
 
 shocks;
-// var eps_z = 0.0066^2;
 var eps_g = 1; 
 end;
-
-resid;
-
 steady;
-
 check;
 
+varobs ghat log_y y; // you need to specify observables
+
 %----------------------------------------------------------------
-% generate IRFs and compute model moments
+% IRF matching example 1:
+% - different ways to MANUALLY enter values and weights
+% - Maximum likelihood estimation
 %----------------------------------------------------------------
-stoch_simul(order = 1,irf=@{IRF_periods}) log_y log_c ghat;
+estimated_params;
+root_g_1 , 0.90 , 0, 1;
+root_g_2 , 0.10 , 0, 1;
+end;
+
+xx = [1.007,1.117,1.092];
+ww = [51,52];
+
+matched_irfs; 
+var log_y ;  varexo eps_g ;  periods 1, 2   ;  values 0.20, 0.17   ;  weights 360, 140 ;
+var ghat  ;  varexo eps_g ;  periods 2 3:5  ;  values 1.01, (xx)   ;  weights 50, 20   ;
+var y     ;  varexo eps_g ;  periods 10:11  ;  values (log(1.05))  ;  weights (ww)     ;
+end;
+
+method_of_moments(mom_method = irf_matching, mode_compute = 5, additional_optimizer_steps=[4]);
 
 
-%% get empirical IRFs and weighting matrix
-[IRF_empirical,IRF_weighting,IRF_quantiles]=get_empirical_IRFs(@{IRF_periods})
-         
+%----------------------------------------------------------------
+% IRF matching example 2
+% - use all IRFs given in MATLAB objects
+% - use Bayesian Slice sampler
+%----------------------------------------------------------------
+estimated_params(overwrite);
+root_g_1 , 0.50 , 0, 1, beta_pdf      , 0.50 , 0.20;
+root_g_2 , 0.10 , 0, 1, beta_pdf      , 0.50 , 0.20;
+end;
 
-x_start=[root_g_1 root_g_2]; %use calibration as starting point
-%make sure Dynare does not print out stuff during runs
-options_.nomoments=1;
-options_.nofunctions=1;
-options_.nograph=1;
-options_.verbosity=0;
+% get data
+irfs_data = importdata('rbc_irf_matching_data.csv');
+irfs_ghat_eps_g     = irfs_data.data(2:80,1); % start in t=2 due to identification restrictions in SVAR
+irfs_log_y_eps_g    = irfs_data.data(1:80,2);
+weights_ghat_eps_g  = 1./irfs_data.data(2:80,3);
+weights_log_y_eps_g = 1./irfs_data.data(1:80,4);
 
-%set noprint option to suppress error messages within optimizer
-options_.noprint=1;
+matched_irfs(overwrite);
+var ghat ; varexo eps_g; periods 2:80; values (irfs_ghat_eps_g);  weights (weights_ghat_eps_g);
+var log_y; varexo eps_g; periods 1:80; values (irfs_log_y_eps_g);   weights (weights_log_y_eps_g);
+end;
 
-@#if CMAES==0
-    % set csminwel options
-    H0 = 1e-2*eye(length(x_start)); %Initial Hessian 
-    crit = 1e-8; %Tolerance
-    nit = 1000;  %Number of iterations
+method_of_moments(mom_method = irf_matching
+                 ,order = 1
+                 ,mh_nblocks = 2, mh_replic = 50
+                 ,posterior_sampling_method = 'slice'
+                 ,plot_priors = 1
+                 );
 
-    [fhat,x_opt_hat] = csminwel(@IRF_matching_objective,x_start,H0,[],crit,nit,IRF_empirical,IRF_weighting);
-@#else
-    %set CMAES options
-    H0=0.2*ones(size(x_start,1),1)
-    cmaesOptions = options_.cmaes;
-    cmaesOptions.LBounds = [-1;-1];
-    cmaesOptions.UBounds = [1;1];
-    [x_opt_hat, fhat, COUNTEVAL, STOPFLAG, OUT, BESTEVER] = cmaes('IRF_matching_objective',x_start,H0,cmaesOptions,IRF_empirical,IRF_weighting);
-    x_opt_hat=BESTEVER.x;
-@#endif
+%----------------------------------------------------------------
+% IRF matching example 3:
+% - use anonymous function to access IRFs more flexible
+% - showcase how to use irf_matching_file
+% - find posterior mode
+%----------------------------------------------------------------
 
-%get IRFs at the optimum and plot them
-[fval, IRF_model]=IRF_matching_objective(x_opt_hat,IRF_empirical,IRF_weighting);
+% get data
+irfs_data = importdata('rbc_irf_matching_data.csv');
 
-figure
-subplot(2,1,1)
-plot(1:options_.irf,IRF_empirical(:,1),1:options_.irf,IRF_model(:,1),1:options_.irf,IRF_quantiles(1,:,1),'r--',1:options_.irf,IRF_quantiles(1,:,2),'r--');
-title('G')
-subplot(2,1,2)
-plot(1:options_.irf,IRF_empirical(:,2),1:options_.irf,IRF_model(:,2),1:options_.irf,IRF_quantiles(2,:,1),'r--',1:options_.irf,IRF_quantiles(2,:,2),'r--');
-title('Y')
-legend('Empirical','Model')
+% use anonymous function (or MATLAB function) to have more flexibility, but inputs can only be numerical
+% we also take 100 just for illustration that you can do any required transformation in an irf_matching_file
+irfs_vals    = @(j) 100.*(irfs_data.data(2:80,j));
+irfs_weights = @(j) 1./(irfs_data.data(2:80,j));
 
+matched_irfs(overwrite);
+var ghat ; varexo eps_g; periods 2:80; values (irfs_vals(1));  weights (irfs_weights(3));
+var log_y; varexo eps_g; periods 2:80; values (irfs_vals(2));  weights (irfs_weights(4));
+end;
 
+% we use the irf_matching_file to transform variable y to log(y) so the model
+% variable aligns with the variable from the given empirical SVAR
+method_of_moments(mom_method = irf_matching
+                 ,irf_matching_file = rbc_irf_matching_transformations
+                 ,mh_replic = 0,plot_priors = 0
+                 );
